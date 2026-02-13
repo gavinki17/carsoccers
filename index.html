@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Web Rocket League Prototype</title>
+    <title>3D Web Rocket League</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px 4px #000; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h1>Web League 3D</h1>
-        <p>WASD to Drive | Space to Jump/Flip | Shift to Boost</p>
+        <h2>Web Rocket League</h2>
+        <p>WASD: Drive | Space: Jump/Flip | Shift: Boost</p>
+        <div id="score">BLUE 0 - 0 RED</div>
     </div>
 
     <script type="importmap">
@@ -27,27 +28,19 @@
         import * as THREE from 'three';
         import * as CANNON from 'cannon-es';
 
-        // --- SETUP SCENE & PHYSICS ---
+        // --- SCENE SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87ceeb); // Sky blue
-        const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+        scene.background = new THREE.Color(0x1a1a2e);
+        const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -20, 0) });
         
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- LIGHTING ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(10, 20, 10);
-        scene.add(sun);
-
-        // --- THE ARENA ---
-        // Floor
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
-        const groundGeo = new THREE.PlaneGeometry(100, 150);
+        // --- ARENA & GOALS ---
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x1d4d1d });
+        const groundGeo = new THREE.PlaneGeometry(80, 120);
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         scene.add(ground);
@@ -56,83 +49,114 @@
         groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(groundBody);
 
-        // Simple Arena Walls & Roof
-        const arenaMaterial = new THREE.MeshStandardMaterial({ color: 0x444444, transparent: true, opacity: 0.3 });
-        const wallG = new THREE.BoxGeometry(100, 40, 1);
-        const wall = new THREE.Mesh(wallG, arenaMaterial);
-        wall.position.set(0, 20, 75); // Back wall
-        scene.add(wall);
+        // Simple Goal Creation
+        function createGoal(zPos, color) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshBasicMaterial({ color: color, wireframe: true });
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(20, 10, 5), mat);
+            frame.position.set(0, 5, zPos);
+            scene.add(frame);
+        }
+        createGoal(-60, 0x00aaff); // Blue Goal
+        createGoal(60, 0xff4400);  // Red Goal
 
-        // --- THE BALL ---
-        const ballGeo = new THREE.SphereGeometry(2, 32, 32);
-        const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-        const ballMesh = new THREE.Mesh(ballGeo, ballMat);
-        scene.add(ballMesh);
-
-        const ballBody = new CANNON.Body({
-            mass: 1,
-            shape: new CANNON.Sphere(2),
-            material: new CANNON.Material({ restitution: 0.9 }) // Bouncy!
-        });
-        ballBody.position.set(0, 10, 0);
-        world.addBody(ballBody);
-
-        // --- THE CAR (CHASSIS) ---
-        const carGeo = new THREE.BoxGeometry(2, 1, 4);
-        const carMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-        const carMesh = new THREE.Mesh(carGeo, carMat);
-        scene.add(carMesh);
-
-        const carBody = new CANNON.Body({ mass: 5, shape: new CANNON.Box(new CANNON.Vec3(1, 0.5, 2)) });
-        carBody.position.set(0, 2, 50);
+        // --- THE CAR (CHASSIS + WHEELS) ---
+        const carBody = new CANNON.Body({ mass: 150 });
+        carBody.addShape(new CANNON.Box(new CANNON.Vec3(1.2, 0.5, 2)));
+        carBody.position.set(0, 2, 40);
         world.addBody(carBody);
 
-        // --- INPUT HANDLING ---
-        const keys = {};
-        window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-        window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+        const carMesh = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1, 4), new THREE.MeshStandardMaterial({ color: 0x3498db }));
+        scene.add(carMesh);
 
-        // --- GAME LOOP ---
+        // Raycast Vehicle Configuration
+        const vehicle = new CANNON.RaycastVehicle({ chassisBody: carBody });
+        
+        const wheelOptions = {
+            radius: 0.5,
+            directionLocal: new CANNON.Vec3(0, -1, 0),
+            suspensionStiffness: 30,
+            suspensionRestLength: 0.3,
+            frictionSlip: 1.4,
+            rollInfluence: 0.1,
+            axleLocal: new CANNON.Vec3(1, 0, 0),
+            chassisConnectionPointLocal: new CANNON.Vec3(1, 0, 1)
+        };
+
+        // Add 4 Wheels
+        const wheelMeshes = [];
+        const positions = [[1, 0, 1.5], [-1, 0, 1.5], [1, 0, -1.5], [-1, 0, -1.5]];
+        positions.forEach(pos => {
+            wheelOptions.chassisConnectionPointLocal.set(...pos);
+            vehicle.addWheel(wheelOptions);
+            const wMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+            wMesh.rotation.z = Math.PI / 2;
+            wheelMeshes.push(wMesh);
+            scene.add(wMesh);
+        });
+        vehicle.addToWorld(world);
+
+        // --- THE BALL ---
+        const ballBody = new CANNON.Body({ mass: 10, shape: new CANNON.Sphere(1.5) });
+        ballBody.position.set(0, 5, 0);
+        ballBody.linearDamping = 0.1;
+        world.addBody(ballBody);
+        const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        scene.add(ballMesh);
+
+        // --- LIGHTING ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const light = new THREE.PointLight(0xffffff, 100);
+        light.position.set(0, 20, 0);
+        scene.add(light);
+
+        // --- CONTROLS ---
+        const keys = {};
+        window.onkeydown = (e) => keys[e.key.toLowerCase()] = true;
+        window.onkeyup = (e) => keys[e.key.toLowerCase()] = false;
+
         function animate() {
             requestAnimationFrame(animate);
             world.fixedStep();
 
-            // Movement Physics
-            const force = 40;
-            const torque = 5;
+            // Driving Logic
+            const engineForce = 1500;
+            const steeringValue = 0.5;
 
-            if (keys['w']) {
-                const vector = new CANNON.Vec3(0, 0, -force);
-                carBody.applyLocalForce(vector, new CANNON.Vec3(0, 0, 0));
-            }
-            if (keys['s']) {
-                const vector = new CANNON.Vec3(0, 0, force);
-                carBody.applyLocalForce(vector, new CANNON.Vec3(0, 0, 0));
-            }
-            if (keys['a']) carBody.angularVelocity.y = torque;
-            if (keys['d']) carBody.angularVelocity.y = -torque;
+            vehicle.applyEngineForce(keys['w'] ? -engineForce : (keys['s'] ? engineForce : 0), 2);
+            vehicle.applyEngineForce(keys['w'] ? -engineForce : (keys['s'] ? engineForce : 0), 3);
             
-            // Jump / Flip Logic
-            if (keys[' ']) {
-                if (Math.abs(carBody.velocity.y) < 0.1) {
-                    carBody.velocity.y = 10; // Simple Jump
-                }
+            let steer = 0;
+            if (keys['a']) steer = steeringValue;
+            if (keys['d']) steer = -steeringValue;
+            vehicle.setSteeringValue(steer, 0);
+            vehicle.setSteeringValue(steer, 1);
+
+            // Jump / Flip
+            if (keys[' '] && Math.abs(carBody.velocity.y) < 0.5) {
+                carBody.applyImpulse(new CANNON.Vec3(0, 1000, 0));
             }
 
-            // Sync Visuals with Physics
+            // Sync Car Visuals
             carMesh.position.copy(carBody.position);
             carMesh.quaternion.copy(carBody.quaternion);
-            ballMesh.position.copy(ballBody.position);
-            ballMesh.quaternion.copy(ballBody.quaternion);
+            
+            // Sync Wheel Visuals
+            for (let i = 0; i < vehicle.wheelInfos.length; i++) {
+                vehicle.updateWheelTransform(i);
+                const t = vehicle.wheelInfos[i].worldTransform;
+                wheelMeshes[i].position.copy(t.position);
+                wheelMeshes[i].quaternion.copy(t.quaternion);
+            }
 
-            // Follow Camera
-            const cp = carBody.position;
-            camera.position.set(cp.x, cp.y + 5, cp.z + 15);
-            camera.lookAt(cp.x, cp.y, cp.z);
+            ballMesh.position.copy(ballBody.position);
+
+            // Camera follow
+            camera.position.lerp(new THREE.Vector3(carBody.position.x, carBody.position.y + 6, carBody.position.z + 12), 0.1);
+            camera.lookAt(carBody.position);
 
             renderer.render(scene, camera);
         }
-
         animate();
     </script>
 </body>
