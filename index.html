@@ -41,11 +41,11 @@
         import * as THREE from 'three';
         import * as CANNON from 'cannon-es';
 
-        // --- 1. PHYSICS WORLD SETUP ---
+        // --- PHYSICS WORLD SETUP ---
         const world = new CANNON.World();
-        world.gravity.set(0, -15, 0); // Slightly higher gravity for that "Rocket League" weight
+        world.gravity.set(0, -15, 0);
 
-        // --- 2. THREE.JS SCENE SETUP ---
+        // --- THREE.JS SCENE SETUP ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87ceeb);
 
@@ -63,8 +63,7 @@
         sun.castShadow = true;
         scene.add(sun);
 
-        // --- 3. THE ENVIRONMENT ---
-        // Ground Mesh & Physics
+        // --- ENVIRONMENT ---
         const groundGeo = new THREE.PlaneGeometry(200, 300);
         const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32 });
         const groundMesh = new THREE.Mesh(groundGeo, groundMat);
@@ -80,7 +79,7 @@
         groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         world.addBody(groundBody);
 
-        // --- 4. THE BALL ---
+        // --- BALL ---
         const ballRadius = 2;
         const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
         const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
@@ -96,27 +95,23 @@
         });
         world.addBody(ballBody);
 
-        // --- 5. THE VEHICLE ---
-        // Chassis Physics Body
+        // --- VEHICLE ---
         const chassisShape = new CANNON.Box(new CANNON.Vec3(1, 0.5, 2));
         const chassisBody = new CANNON.Body({ mass: 200 });
         chassisBody.addShape(chassisShape);
         chassisBody.position.set(0, 5, 20);
         world.addBody(chassisBody);
 
-        // Chassis Visuals
         const carGroup = new THREE.Group();
         const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshStandardMaterial({ color: 0xdb2719 }));
         bodyMesh.castShadow = true;
         carGroup.add(bodyMesh);
 
-        // Add a "Hood" so we can see the front (Direction: -Z is forward)
         const hoodMesh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 1.5), new THREE.MeshStandardMaterial({ color: 0x333333 }));
         hoodMesh.position.set(0, 0.5, -0.8);
         carGroup.add(hoodMesh);
         scene.add(carGroup);
 
-        // Vehicle Controller
         const vehicle = new CANNON.RaycastVehicle({
             chassisBody: chassisBody,
             indexForwardAxis: 2,
@@ -124,7 +119,6 @@
             indexUpAxis: 1
         });
 
-        // Wheel Settings
         const wheelOptions = {
             radius: 0.6,
             directionLocal: new CANNON.Vec3(0, -1, 0),
@@ -145,10 +139,10 @@
         const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
 
         const wheelPositions = [
-            new CANNON.Vec3(-1.1, 0, -1.2), // Front Left
-            new CANNON.Vec3(1.1, 0, -1.2),  // Front Right
-            new CANNON.Vec3(-1.1, 0, 1.2),  // Back Left
-            new CANNON.Vec3(1.1, 0, 1.2)    // Back Right
+            new CANNON.Vec3(-1.1, 0, -1.2),
+            new CANNON.Vec3(1.1, 0, -1.2),
+            new CANNON.Vec3(-1.1, 0, 1.2),
+            new CANNON.Vec3(1.1, 0, 1.2)
         ];
 
         wheelPositions.forEach((pos) => {
@@ -162,53 +156,55 @@
 
         vehicle.addToWorld(world);
 
-        // --- 6. INPUTS ---
+        // --- INPUTS ---
         const keys = {};
         window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
-        // --- 7. ANIMATION LOOP ---
+        // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
             world.fixedStep();
 
-            // Movement Constants
-            const force = keys['shift'] ? 4000 : 2500;
-            const steer = 0.5;
+            // --- DRIVING ---
+            const engineForce = keys['shift'] ? 5000 : 3000;
+            const maxSteer = 0.6;
+            const brakeForce = 50;
 
-            // Drive logic (-Z is forward in this coordinate system)
+            // Reset brakes
+            for (let i = 0; i < 4; i++) vehicle.setBrake(0, i);
+
+            // Forward/Reverse
             if (keys['w']) {
-                vehicle.applyEngineForce(-force, 2);
-                vehicle.applyEngineForce(-force, 3);
+                vehicle.applyEngineForce(-engineForce, 2);
+                vehicle.applyEngineForce(-engineForce, 3);
             } else if (keys['s']) {
-                vehicle.applyEngineForce(force, 2);
-                vehicle.applyEngineForce(force, 3);
+                vehicle.applyEngineForce(engineForce, 2);
+                vehicle.applyEngineForce(engineForce, 3);
             } else {
                 vehicle.applyEngineForce(0, 2);
                 vehicle.applyEngineForce(0, 3);
-                vehicle.setBrake(10, 0); // Rolling resistance
-                vehicle.setBrake(10, 1);
             }
 
             // Steering
             if (keys['a']) {
-                vehicle.setSteeringValue(steer, 0);
-                vehicle.setSteeringValue(steer, 1);
+                vehicle.setSteeringValue(maxSteer, 0);
+                vehicle.setSteeringValue(maxSteer, 1);
             } else if (keys['d']) {
-                vehicle.setSteeringValue(-steer, 0);
-                vehicle.setSteeringValue(-steer, 1);
+                vehicle.setSteeringValue(-maxSteer, 0);
+                vehicle.setSteeringValue(-maxSteer, 1);
             } else {
                 vehicle.setSteeringValue(0, 0);
                 vehicle.setSteeringValue(0, 1);
             }
 
-            // Jump (Only if close to ground)
+            // Jump
             if (keys[' '] && Math.abs(chassisBody.velocity.y) < 1) {
                 chassisBody.applyImpulse(new CANNON.Vec3(0, 600, 0));
-                keys[' '] = false; // Prevent multi-jump
+                keys[' '] = false;
             }
 
-            // Sync Visuals
+            // Sync visuals
             carGroup.position.copy(chassisBody.position);
             carGroup.quaternion.copy(chassisBody.quaternion);
 
@@ -222,7 +218,7 @@
             ballMesh.position.copy(ballBody.position);
             ballMesh.quaternion.copy(ballBody.quaternion);
 
-            // Dynamic Camera
+            // Camera
             const cameraOffset = new THREE.Vector3(0, 6, 12);
             cameraOffset.applyQuaternion(carGroup.quaternion);
             const targetPos = new THREE.Vector3().copy(carGroup.position).add(cameraOffset);
@@ -232,7 +228,7 @@
             renderer.render(scene, camera);
         }
 
-        // Handle Resizing
+        // Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
