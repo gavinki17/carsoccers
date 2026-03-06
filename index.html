@@ -2,63 +2,41 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Rocket League Web Remake (Basic 3D)</title>
+    <title>Rocket League Web Remake v2 - Flips + Air Boost + Bigger Arena</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
         #ui {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            color: white;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; color: white;
         }
         #instructions {
-            position: absolute;
-            top: 20px; left: 20px;
-            background: rgba(0,0,0,0.6);
-            padding: 15px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            line-height: 1.5;
-            pointer-events: auto;
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0,0,0,0.7); padding: 15px 25px; border-radius: 12px;
+            font-size: 15px; line-height: 1.6; max-width: 320px;
         }
         #score {
-            position: absolute;
-            top: 20px; right: 20px;
-            background: rgba(0,0,0,0.6);
-            padding: 10px 25px;
-            border-radius: 10px;
-            font-size: 32px;
-            font-weight: bold;
-            text-shadow: 0 0 10px #000;
-            pointer-events: auto;
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(0,0,0,0.7); padding: 12px 30px; border-radius: 12px;
+            font-size: 36px; font-weight: bold; text-shadow: 0 0 15px #000;
         }
         #goalText {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 80px;
-            font-weight: bold;
-            color: #ff0;
-            text-shadow: 0 0 20px #f00;
-            opacity: 0;
-            transition: opacity 0.5s;
-            pointer-events: none;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 90px; font-weight: 900; color: #ff0; text-shadow: 0 0 30px #f00;
+            opacity: 0; transition: opacity 0.6s; pointer-events: none;
         }
         canvas { display: block; }
     </style>
-    <!-- Three.js from CDN (stable r134 - works perfectly for this) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 </head>
 <body>
 <div id="ui">
     <div id="instructions">
-        <strong>ROCKET LEAGUE WEB REMAKE</strong><br>
-        WASD — Drive / Reverse<br>
-        A / D — Steer<br>
-        SPACE — Jump<br>
-        SHIFT — Boost<br><br>
-        Hit the ball into the goals!<br>
-        (Single-player practice mode)
+        <strong>ROCKET LEAGUE WEB v2</strong><br>
+        WASD — Drive<br>
+        A/D — Steer<br>
+        SPACE — Jump / Flip (tap twice fast)<br>
+        SHIFT — Boost (works in air!)<br><br>
+        Bigger arena • Smaller car • Real flips • No lag on hit
     </div>
     <div id="score">BLUE 0 — 0 ORANGE</div>
     <div id="goalText">GOOOAL!</div>
@@ -69,145 +47,134 @@
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-// Lights
-const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
-const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.position.set(80, 120, 50);
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(100, 150, 80);
 sun.castShadow = true;
 scene.add(sun);
 
-// ====================== FIELD ======================
-const FIELD_W = 70;
-const FIELD_L = 110;
-const GOAL_W = 22;
+// ====================== BIGGER ARENA ======================
+const FIELD_W = 90;   // was 70
+const FIELD_L = 140;  // was 110
+const GOAL_W = 26;
 
-// Floor
 const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(FIELD_W, FIELD_L),
-    new THREE.MeshPhongMaterial({ color: 0x00bb00, shininess: 10 })
+    new THREE.MeshPhongMaterial({ color: 0x00aa33, shininess: 5 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-// Field borders (walls)
-const wallMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
-const wallH = 6;
-const wallT = 3;
+const wallMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+const wallH = 8;
+const wallT = 4;
 
-// Long walls (left & right)
-const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, FIELD_L + 10), wallMat);
+// Long walls
+const longWallGeo = new THREE.BoxGeometry(wallT, wallH, FIELD_L + 20);
+const leftWall = new THREE.Mesh(longWallGeo, wallMat);
 leftWall.position.set(-FIELD_W/2 - wallT/2, wallH/2, 0);
 scene.add(leftWall);
 const rightWall = leftWall.clone();
-rightWall.position.x = FIELD_W/2 + wallT/2;
+rightWall.position.x *= -1;
 scene.add(rightWall);
 
-// Short walls with goal openings (left & right of each goal)
+// Short walls + goal openings
 const shortW = (FIELD_W - GOAL_W) / 2;
 const shortGeo = new THREE.BoxGeometry(shortW, wallH, wallT);
 const zPlusLeft = new THREE.Mesh(shortGeo, wallMat);
 zPlusLeft.position.set(-FIELD_W/2 + shortW/2, wallH/2, FIELD_L/2 + wallT/2);
 scene.add(zPlusLeft);
-const zPlusRight = zPlusLeft.clone();
-zPlusRight.position.x = FIELD_W/2 - shortW/2;
-scene.add(zPlusRight);
-const zMinusLeft = zPlusLeft.clone();
-zMinusLeft.position.z = -FIELD_L/2 - wallT/2;
-scene.add(zMinusLeft);
-const zMinusRight = zPlusRight.clone();
-zMinusRight.position.z = -FIELD_L/2 - wallT/2;
-scene.add(zMinusRight);
+const zPlusRight = zPlusLeft.clone(); zPlusRight.position.x *= -1; scene.add(zPlusRight);
+const zMinusLeft = zPlusLeft.clone(); zMinusLeft.position.z = -FIELD_L/2 - wallT/2; scene.add(zMinusLeft);
+const zMinusRight = zPlusRight.clone(); zMinusRight.position.z = -FIELD_L/2 - wallT/2; scene.add(zMinusRight);
 
-// Goal structures
+// Goals
 function createGoal(z, color) {
     const postMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
-    // Posts
-    const leftPost = new THREE.Mesh(new THREE.BoxGeometry(1.5, 10, 1.5), postMat);
-    leftPost.position.set(-GOAL_W/2, 5, z);
-    scene.add(leftPost);
-    const rightPost = leftPost.clone();
-    rightPost.position.x = GOAL_W/2;
-    scene.add(rightPost);
-    // Crossbar
-    const cross = new THREE.Mesh(new THREE.BoxGeometry(GOAL_W + 3, 1.5, 1.5), postMat);
-    cross.position.set(0, 10, z);
-    scene.add(cross);
-    // Net (semi-transparent)
-    const netMat = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
-    const net = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, 10), netMat);
-    net.position.set(0, 5, z + (z > 0 ? 2 : -2));
+    const post = new THREE.Mesh(new THREE.BoxGeometry(2, 12, 2), postMat);
+    post.position.set(-GOAL_W/2, 6, z); scene.add(post);
+    const post2 = post.clone(); post2.position.x = GOAL_W/2; scene.add(post2);
+    const cross = new THREE.Mesh(new THREE.BoxGeometry(GOAL_W + 4, 2, 2), postMat);
+    cross.position.set(0, 12, z); scene.add(cross);
+
+    const netMat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+    const net = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, 12), netMat);
+    net.position.set(0, 6, z + (z > 0 ? 3 : -3));
     net.rotation.y = z > 0 ? Math.PI : 0;
     scene.add(net);
 }
-createGoal(FIELD_L/2, 0xff8800);   // Orange goal
-createGoal(-FIELD_L/2, 0x4488ff);  // Blue goal
+createGoal(FIELD_L/2, 0xff6600);
+createGoal(-FIELD_L/2, 0x3388ff);
 
 // Center line
 const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-const points = [new THREE.Vector3(0, 0.2, -FIELD_L/2), new THREE.Vector3(0, 0.2, FIELD_L/2)];
-const centerLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMat);
-scene.add(centerLine);
+const points = [new THREE.Vector3(0, 0.3, -FIELD_L/2), new THREE.Vector3(0, 0.3, FIELD_L/2)];
+scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMat));
 
-// ====================== CAR ======================
+// ====================== SMALLER CAR ======================
 let car = {
     group: new THREE.Group(),
     velocity: new THREE.Vector3(),
+    angularVelocity: new THREE.Vector3(),
     vy: 0,
-    onGround: true
+    onGround: true,
+    lastJumpTime: 0,
+    flipState: 0,        // 0 = none, 1 = starting flip, 2 = flipping
+    flipProgress: 0,
+    boostFuel: 100,
+    boosting: false
 };
 
 const carBody = new THREE.Mesh(
-    new THREE.BoxGeometry(8, 4, 12),
-    new THREE.MeshPhongMaterial({ color: 0xff2222, shininess: 30 })
+    new THREE.BoxGeometry(5.5, 3.2, 8.5),           // smaller than before
+    new THREE.MeshPhongMaterial({ color: 0xff2222, shininess: 40 })
 );
 carBody.castShadow = true;
-carBody.position.y = 2.5;
+carBody.position.y = 2.1;
 car.group.add(carBody);
 
-// Wheels
-const wheelGeo = new THREE.CylinderGeometry(2.2, 2.2, 2, 32);
+// Wheels (smaller)
+const wheelGeo = new THREE.CylinderGeometry(1.6, 1.6, 1.8, 32);
 const wheelMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
-const wheelPositions = [[-4, -3.5], [4, -3.5], [-4, 3.5], [4, 3.5]];
+const wheelPos = [[-2.8, -2.9], [2.8, -2.9], [-2.8, 2.9], [2.8, 2.9]];
 const wheels = [];
-wheelPositions.forEach(p => {
+wheelPos.forEach(p => {
     const w = new THREE.Mesh(wheelGeo, wheelMat);
     w.rotation.z = Math.PI / 2;
-    w.position.set(p[0], 2, p[1]);
+    w.position.set(p[0], 1.8, p[1]);
     car.group.add(w);
     wheels.push(w);
 });
 
-car.group.position.y = 2;
+car.group.position.y = 2.1;
 scene.add(car.group);
 
 // ====================== BALL ======================
 const BALL_RADIUS = 3.2;
 const ball = new THREE.Mesh(
     new THREE.SphereGeometry(BALL_RADIUS, 32, 32),
-    new THREE.MeshPhongMaterial({ color: 0xeeeeee, shininess: 50 })
+    new THREE.MeshPhongMaterial({ color: 0xeeeeee, shininess: 60 })
 );
 ball.castShadow = true;
-ball.receiveShadow = true;
-ball.position.set(0, BALL_RADIUS, 10);
+ball.position.set(0, BALL_RADIUS, 20);
 scene.add(ball);
-let ballVelocity = new THREE.Vector3();
+let ballVelocity = new THREE.Vector3(0, 0, 0);
 
 // ====================== CONTROLS ======================
 const keys = {};
-window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
-window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+window.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
 
 // ====================== SCORE ======================
-let scoreBlue = 0;
-let scoreOrange = 0;
+let scoreBlue = 0, scoreOrange = 0;
 const scoreEl = document.getElementById('score');
 const goalText = document.getElementById('goalText');
 
@@ -218,19 +185,51 @@ function updateScore() {
 function showGoal(text) {
     goalText.textContent = text;
     goalText.style.opacity = 1;
-    setTimeout(() => goalText.style.opacity = 0, 1500);
+    setTimeout(() => goalText.style.opacity = 0, 1800);
 }
 
 // ====================== RESET ======================
 function resetPositions() {
-    car.group.position.set(0, 2, 0);
-    car.group.rotation.y = 0;
-    car.velocity.set(0, 0, 0);
+    car.group.position.set(0, 2.1, 0);
+    car.group.rotation.set(0, 0, 0);
+    car.velocity.set(0,0,0);
+    car.angularVelocity.set(0,0,0);
     car.vy = 0;
     car.onGround = true;
+    car.flipState = 0;
+    car.boostFuel = 100;
 
     ball.position.set(0, BALL_RADIUS, 0);
     ballVelocity.set(0, 0, 0);
+}
+
+// ====================== FLIP SYSTEM ======================
+function startFlip() {
+    if (!car.onGround && car.flipState === 0 && Date.now() - car.lastJumpTime < 280) {
+        car.flipState = 1;
+        car.flipProgress = 0;
+        car.angularVelocity.set(0, 0, 0);
+    }
+}
+
+function updateFlip(delta) {
+    if (car.flipState === 1) {
+        car.flipProgress += delta * 4.5;
+        if (car.flipProgress > 1) {
+            car.flipState = 2;
+            // forward flip
+            car.angularVelocity.x = -18;
+        }
+    }
+    if (car.flipState === 2) {
+        car.group.rotation.x = Math.sin(car.flipProgress * Math.PI) * 3.14;
+        car.flipProgress += delta * 3.8;
+        if (car.flipProgress > 2) {
+            car.group.rotation.x = 0;
+            car.flipState = 0;
+            car.angularVelocity.x = 0;
+        }
+    }
 }
 
 // ====================== GAME LOOP ======================
@@ -238,127 +237,154 @@ const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
-    const delta = Math.min(clock.getDelta(), 0.1); // cap delta
+    const delta = Math.min(clock.getDelta(), 0.1);
 
-    // --- CAR PHYSICS ---
-    const carSpeed = car.velocity.length();
-    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), car.group.rotation.y);
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(car.group.quaternion);
 
-    const accel = 55;
-    const boost = keys['shift'] ? 1.8 : 1;
-
-    if (keys['w']) car.velocity.addScaledVector(forward, accel * boost * delta);
-    if (keys['s']) car.velocity.addScaledVector(forward, -accel * 0.6 * delta);
-
-    // Steering (more responsive at low speed)
-    const turnRate = 2.8 * (1 + (30 - carSpeed) / 60);
-    if (keys['a'] && carSpeed > 1) car.group.rotation.y += turnRate * delta;
-    if (keys['d'] && carSpeed > 1) car.group.rotation.y -= turnRate * delta;
-
-    // Friction & speed limit
-    car.velocity.multiplyScalar(0.94);
-    if (car.velocity.length() > 65) car.velocity.normalize().multiplyScalar(65);
-
-    // Move car
-    car.group.position.addScaledVector(car.velocity, delta);
-
-    // Jump
-    if (keys[' '] && car.onGround) {
-        car.vy = 28;
-        car.onGround = false;
+    // === BOOST ===
+    car.boosting = keys['shift'] && car.boostFuel > 0;
+    if (car.boosting) {
+        car.boostFuel = Math.max(0, car.boostFuel - 42 * delta);
+        const boostPower = car.onGround ? 78 : 62;
+        car.velocity.addScaledVector(forward, boostPower * delta);
+    } else if (car.boostFuel < 100) {
+        car.boostFuel = Math.min(100, car.boostFuel + 18 * delta);
     }
-    car.vy -= 65 * delta; // gravity
+
+    // === GROUND MOVEMENT ===
+    const speed = car.velocity.length();
+    if (car.onGround) {
+        if (keys['w']) car.velocity.addScaledVector(forward, 68 * delta);
+        if (keys['s']) car.velocity.addScaledVector(forward, -42 * delta);
+
+        // steering
+        const turn = (keys['a'] ? 1 : 0) + (keys['d'] ? -1 : 0);
+        if (Math.abs(turn) > 0 && speed > 4) {
+            car.group.rotation.y += turn * 3.4 * delta * (1 - speed/120);
+        }
+
+        // ground friction
+        car.velocity.multiplyScalar(0.87);
+        if (speed > 78) car.velocity.normalize().multiplyScalar(78);
+    }
+
+    // === AIR CONTROL ===
+    if (!car.onGround) {
+        if (keys['w']) car.velocity.addScaledVector(forward, 22 * delta);
+        if (keys['s']) car.velocity.addScaledVector(forward, -18 * delta);
+        if (keys['a']) car.angularVelocity.y += 9 * delta;
+        if (keys['d']) car.angularVelocity.y -= 9 * delta;
+
+        // air roll damping
+        car.angularVelocity.multiplyScalar(0.88);
+        car.group.rotation.y += car.angularVelocity.y * delta;
+    }
+
+    // === JUMP / DOUBLE JUMP = FLIP ===
+    if (keys[' '] && car.onGround) {
+        car.vy = 29;
+        car.onGround = false;
+        car.lastJumpTime = Date.now();
+        car.flipState = 0;
+    }
+
+    // detect second tap for flip
+    if (keys[' '] && !car.onGround && car.flipState === 0) {
+        if (Date.now() - car.lastJumpTime < 300) startFlip();
+    }
+
+    // apply flip
+    updateFlip(delta);
+
+    // gravity
+    car.vy -= 78 * delta;
     car.group.position.y += car.vy * delta;
 
-    // Car ground collision
-    if (car.group.position.y < 2) {
-        car.group.position.y = 2;
-        car.vy = 0;
+    // ground check
+    if (car.group.position.y <= 2.1) {
+        car.group.position.y = 2.1;
+        if (car.vy < 0) car.vy = 0;
         car.onGround = true;
+        car.angularVelocity.x = 0;
+        if (car.flipState !== 0) {
+            car.group.rotation.x = 0;
+            car.flipState = 0;
+        }
     }
 
-    // --- BALL PHYSICS ---
-    ballVelocity.y -= 45 * delta;
+    // move car
+    car.group.position.addScaledVector(car.velocity, delta);
+
+    // === BALL PHYSICS (no lag because we use continuous collision) ===
+    ballVelocity.y -= 52 * delta;
     ball.position.addScaledVector(ballVelocity, delta);
 
-    // Ball ground bounce
+    // ball ground bounce
     if (ball.position.y < BALL_RADIUS) {
         ball.position.y = BALL_RADIUS;
-        ballVelocity.y = -ballVelocity.y * 0.68;
-        ballVelocity.x *= 0.97;
-        ballVelocity.z *= 0.97;
-        if (Math.abs(ballVelocity.y) < 1) ballVelocity.y = 0;
+        ballVelocity.y *= -0.72;
+        ballVelocity.x *= 0.96;
+        ballVelocity.z *= 0.96;
     }
 
-    // Wall collisions (ball)
-    const bounce = 0.82;
-    if (ball.position.x < -FIELD_W/2 + BALL_RADIUS) {
-        ball.position.x = -FIELD_W/2 + BALL_RADIUS;
-        ballVelocity.x = -ballVelocity.x * bounce;
-    }
-    if (ball.position.x > FIELD_W/2 - BALL_RADIUS) {
-        ball.position.x = FIELD_W/2 - BALL_RADIUS;
-        ballVelocity.x = -ballVelocity.x * bounce;
-    }
-
-    // End walls / goals (ball)
+    // ball wall bounce
+    const b = 0.84;
+    if (ball.position.x < -FIELD_W/2 + BALL_RADIUS) { ball.position.x = -FIELD_W/2 + BALL_RADIUS; ballVelocity.x = -ballVelocity.x * b; }
+    if (ball.position.x > FIELD_W/2 - BALL_RADIUS)  { ball.position.x = FIELD_W/2 - BALL_RADIUS;  ballVelocity.x = -ballVelocity.x * b; }
     if (ball.position.z > FIELD_L/2 - BALL_RADIUS) {
         if (Math.abs(ball.position.x) < GOAL_W/2) {
-            scoreOrange++;
-            updateScore();
-            showGoal("ORANGE GOAL!");
-            resetPositions();
+            scoreOrange++; updateScore(); showGoal("ORANGE GOAL!"); resetPositions();
         } else {
-            ball.position.z = FIELD_L/2 - BALL_RADIUS;
-            ballVelocity.z = -ballVelocity.z * bounce;
+            ball.position.z = FIELD_L/2 - BALL_RADIUS; ballVelocity.z = -ballVelocity.z * b;
         }
     }
     if (ball.position.z < -FIELD_L/2 + BALL_RADIUS) {
         if (Math.abs(ball.position.x) < GOAL_W/2) {
-            scoreBlue++;
-            updateScore();
-            showGoal("BLUE GOAL!");
-            resetPositions();
+            scoreBlue++; updateScore(); showGoal("BLUE GOAL!"); resetPositions();
         } else {
-            ball.position.z = -FIELD_L/2 + BALL_RADIUS;
-            ballVelocity.z = -ballVelocity.z * bounce;
+            ball.position.z = -FIELD_L/2 + BALL_RADIUS; ballVelocity.z = -ballVelocity.z * b;
         }
     }
 
-    // Car wall collisions (simple)
-    if (car.group.position.x < -FIELD_W/2 + 5) { car.group.position.x = -FIELD_W/2 + 5; car.velocity.x *= -0.6; }
-    if (car.group.position.x > FIELD_W/2 - 5) { car.group.position.x = FIELD_W/2 - 5; car.velocity.x *= -0.6; }
-    if (car.group.position.z > FIELD_L/2 - 5 && Math.abs(car.group.position.x) > GOAL_W/2) {
-        car.group.position.z = FIELD_L/2 - 5; car.velocity.z *= -0.6;
-    }
-    if (car.group.position.z < -FIELD_L/2 + 5 && Math.abs(car.group.position.x) > GOAL_W/2) {
-        car.group.position.z = -FIELD_L/2 + 5; car.velocity.z *= -0.6;
-    }
+    // === CAR <-> BALL COLLISION (much snappier) ===
+    const toBall = new THREE.Vector3().subVectors(ball.position, car.group.position);
+    const dist = toBall.length();
+    const minDist = BALL_RADIUS + 5.8;
 
-    // --- CAR <-> BALL COLLISION ---
-    const dx = ball.position.x - car.group.position.x;
-    const dy = ball.position.y - car.group.position.y;
-    const dz = ball.position.z - car.group.position.z;
-    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-    if (dist < BALL_RADIUS + 6.5 && dist > 0.01) {
-        const normal = new THREE.Vector3(dx, dy, dz).normalize();
-        const overlap = (BALL_RADIUS + 6.5) - dist;
-        ball.position.addScaledVector(normal, overlap * 0.6);
-        car.group.position.subScaledVector(normal, overlap * 0.3);
+    if (dist < minDist && dist > 0.1) {
+        const normal = toBall.normalize();
+        const overlap = minDist - dist;
 
-        // Transfer momentum (car is heavy)
-        const dot = ballVelocity.dot(normal);
-        ballVelocity.subScaledVector(normal, 2 * dot);
-        ballVelocity.addScaledVector(car.velocity, 1.9);
+        // push apart
+        ball.position.addScaledVector(normal, overlap * 0.7);
+        car.group.position.subScaledVector(normal, overlap * 0.4);
+
+        // instant powerful hit (no lag!)
+        const impact = car.velocity.dot(normal) * 1.95 + 38;
+        ballVelocity.addScaledVector(normal, impact);
+
+        // give car some rebound
+        car.velocity.subScaledVector(normal, impact * 0.35);
     }
 
-    // --- CAMERA (third-person follow) ---
-    const camDist = 45;
-    const camHeight = 28;
-    const idealOffset = new THREE.Vector3(0, camHeight, camDist);
-    idealOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), car.group.rotation.y);
-    camera.position.copy(car.group.position).add(idealOffset);
-    camera.lookAt(car.group.position.x, car.group.position.y + 6, car.group.position.z);
+    // car walls
+    const carHalf = 4;
+    if (car.group.position.x < -FIELD_W/2 + carHalf) { car.group.position.x = -FIELD_W/2 + carHalf; car.velocity.x *= -0.5; }
+    if (car.group.position.x > FIELD_W/2 - carHalf)  { car.group.position.x = FIELD_W/2 - carHalf;  car.velocity.x *= -0.5; }
+    if (car.group.position.z > FIELD_L/2 - carHalf && Math.abs(car.group.position.x) > GOAL_W/2) {
+        car.group.position.z = FIELD_L/2 - carHalf; car.velocity.z *= -0.5;
+    }
+    if (car.group.position.z < -FIELD_L/2 + carHalf && Math.abs(car.group.position.x) > GOAL_W/2) {
+        car.group.position.z = -FIELD_L/2 + carHalf; car.velocity.z *= -0.5;
+    }
+
+    // === CAMERA ===
+    const camDist = 48;
+    const camHeight = 32;
+    const ideal = new THREE.Vector3(0, camHeight, camDist);
+    ideal.applyQuaternion(car.group.quaternion);
+    camera.position.copy(car.group.position).add(ideal);
+    camera.lookAt(car.group.position.x, car.group.position.y + 8, car.group.position.z);
 
     renderer.render(scene, camera);
 }
